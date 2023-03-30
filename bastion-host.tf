@@ -4,8 +4,8 @@ module "bastion_host" {
 
   release_version = "1"
 
-  resource_group_name = module.this.name
-  location            = module.this.location
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
 
   ssh_source_address_list = ["54.232.165.254", "99.238.113.152", "112.134.140.20"]
 

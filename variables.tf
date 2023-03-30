@@ -1,3 +1,8 @@
+variable "project_name" {
+  type = string
+  default = "ccp-pulse"
+} 
+
 variable "env" {
   type = string
 }

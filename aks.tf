@@ -5,10 +5,10 @@ module "aks" {
   subscription_id = var.subscription_id
 
 
-  resource_group_name = module.this.name
+  resource_group_name = module.resource_group.name
   vnet_name           = module.vnet.name
 
-  aks_cluster_name          = "smn-dev-aks"
+  aks_cluster_name          = "${var.project_name}-${var.env}-aks"
   aks_cluster_version       = "1.25.5"
   aks_cluster_acr_name      = "ccpcontainerregistry"
   acr_resource_group_name   = "shared-services"
