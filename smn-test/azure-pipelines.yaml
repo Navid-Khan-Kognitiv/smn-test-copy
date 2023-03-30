@@ -1,0 +1,274 @@
+trigger:
+  branches:
+    include:
+    - '*'
+pool:
+  vmImage: 'ubuntu-22.04'
+
+variables:
+- name: TF_CLI_CONFIG_FILE
+  value: $(System.DefaultWorkingDirectory)/.terraformrc
+- name: TF_IN_AUTOMATION
+  value: true
+
+stages:
+- stage: ci
+  jobs:
+  - job: validate
+    steps:
+    - task: AzureKeyVault@2
+      inputs:
+        azureSubscription: 'kls-prd (174e20af-0f2b-46b0-b2e8-9f5036577a88)'
+        KeyVaultName: 'ado-keyring'
+        SecretsFilter: '*'
+        RunAsPreJob: true
+    - task: CmdLine@2
+      displayName: terraform login
+      inputs:
+        script: echo 'credentials "app.terraform.io" { token = "$(TF-API-AZ-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+    - task: CmdLine@2
+      displayName: Terraform Validate
+      inputs:
+        script: |
+          terraform init -backend=false
+          terraform validate
+
+  - job: plan
+    steps:
+    - task: AzureKeyVault@2
+      inputs:
+        azureSubscription: 'kls-prd (174e20af-0f2b-46b0-b2e8-9f5036577a88)'
+        KeyVaultName: 'ado-keyring'
+        SecretsFilter: '*'
+        RunAsPreJob: true
+    - task: CmdLine@2
+      displayName: terraform login
+      inputs:
+        script: echo 'credentials "app.terraform.io" { token = "$(TF-API-AZ-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+    - task: CmdLine@2
+      env:
+        TF_WORKSPACE: dev
+      displayName: init
+      inputs:
+        script: terraform init -input=false
+    - task: CmdLine@2
+      env:
+        TF_WORKSPACE: dev
+      displayName: plan dev
+      inputs:
+        script: terraform plan -input=false
+    - task: CmdLine@2
+      env:
+        TF_WORKSPACE: dev
+      displayName: graph plan dev
+      inputs:
+        script: terraform graph -type=plan > graph.svg
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Terraform Graph'
+      inputs:
+        artifactName: 'terraform-graph'
+        pathToPublish: '$(System.DefaultWorkingDirectory)/graph.svg'
+    # - task: CmdLine@2
+    #   env:
+    #     TF_WORKSPACE: qa
+    #   displayName: plan qa
+    #   inputs:
+    #     script: terraform plan -input=false
+    # - task: CmdLine@2
+    #   env:
+    #     TF_WORKSPACE: ist
+    #   displayName: plan ist
+    #   inputs:
+    #     script: terraform plan -input=false
+    # - task: CmdLine@2
+    #   env:
+    #     TF_WORKSPACE: uat
+    #   displayName: plan uat
+    #   inputs:
+    #     script: terraform plan -input=false
+    # - task: CmdLine@2
+    #   env:
+    #     TF_WORKSPACE: prod
+    #   displayName: plan prod
+    #   inputs:
+    #     script: terraform plan -input=false
+
+- stage: deploy_dev
+  dependsOn:
+  - ci
+  condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  jobs:
+  - deployment: dev
+    variables:
+    - name: TF_WORKSPACE
+      value: dev
+    environment:
+      name: dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureKeyVault@2
+            inputs:
+              azureSubscription: 'kls-prd (174e20af-0f2b-46b0-b2e8-9f5036577a88)'
+              KeyVaultName: 'ado-keyring'
+              SecretsFilter: '*'
+              RunAsPreJob: true
+          - task: CmdLine@2
+            displayName: terraform login
+            inputs:
+              script: echo 'credentials "app.terraform.io" { token = "$(TF-API-AZ-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+          - task: CmdLine@2
+            displayName: init
+            inputs:
+              script: terraform init -input=false
+          - task: CmdLine@2
+            displayName: apply
+            inputs:
+              script: terraform apply -auto-approve
+    
+# - stage: deploy_qa
+#   dependsOn:
+#   - deploy_dev
+#   condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+#   jobs:
+#   - deployment: qa
+#     variables:
+#     - name: TF_WORKSPACE
+#       value: qa
+#     environment:
+#       name: qa
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - checkout: self
+#           - task: CmdLine@2
+#             displayName: terraform login
+#             inputs:
+#               script: echo 'credentials "app.terraform.io" { token = "$(TF-API-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+#           - task: CmdLine@2
+#             displayName: init
+#             inputs:
+#               script: terraform init -input=false
+#           - task: CmdLine@2
+#             displayName: apply
+#             inputs:
+#               script: terraform apply -auto-approve
+
+# - stage: deploy_ist
+#   dependsOn:
+#   - deploy_qa
+#   condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+#   jobs:
+#   - deployment: ist
+#     variables:
+#     - name: TF_WORKSPACE
+#       value: ist
+#     environment:
+#       name: ist
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - checkout: self
+#           - task: CmdLine@2
+#             displayName: terraform login
+#             inputs:
+#               script: echo 'credentials "app.terraform.io" { token = "$(TF-API-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+#           - task: CmdLine@2
+#             displayName: init
+#             inputs:
+#               script: terraform init -input=false
+#           - task: CmdLine@2
+#             displayName: apply
+#             inputs:
+#               script: terraform apply -auto-approve
+
+# - stage: deploy_uat
+#   dependsOn:
+#   - ci
+#   condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+#   jobs:
+#   - deployment: uat
+#     variables:
+#     - name: TF_WORKSPACE
+#       value: uat
+#     environment:
+#       name: uat
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - checkout: self
+#           - task: CmdLine@2
+#             displayName: terraform login
+#             inputs:
+#               script: echo 'credentials "app.terraform.io" { token = "$(TF-API-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+#           - task: CmdLine@2
+#             displayName: init
+#             inputs:
+#               script: terraform init -input=false
+#           - task: CmdLine@2
+#             displayName: apply
+#             inputs:
+#               script: terraform apply -auto-approve
+
+# - stage: deploy_prod
+#   dependsOn:
+#   - deploy_uat
+#   condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+#   jobs:
+#   - deployment: prod
+#     variables:
+#     - name: TF_WORKSPACE
+#       value: prod
+#     environment:
+#       name: prod
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - checkout: self
+#           - task: CmdLine@2
+#             displayName: terraform login
+#             inputs:
+#               script: echo 'credentials "app.terraform.io" { token = "$(TF-API-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+#           - task: CmdLine@2
+#             displayName: init
+#             inputs:
+#               script: terraform init -input=false
+#           - task: CmdLine@2
+#             displayName: apply
+#             inputs:
+#               script: terraform apply -auto-approve
+
+# - stage: deploy_dr
+#   dependsOn:
+#   - deploy_prod
+#   condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+#   jobs:
+#   - deployment: dr
+#     variables:
+#     - name: TF_WORKSPACE
+#       value: dr
+#     environment:
+#       name: dr
+#     strategy:
+#       runOnce:
+#         deploy:
+#           steps:
+#           - checkout: self
+#           - task: CmdLine@2
+#             displayName: terraform login
+#             inputs:
+#               script: echo 'credentials "app.terraform.io" { token = "$(TF-API-KEY)" }' >$(System.DefaultWorkingDirectory)/.terraformrc
+#           - task: CmdLine@2
+#             displayName: init
+#             inputs:
+#               script: terraform init -input=false
+#           - task: CmdLine@2
+#             displayName: apply
+#             inputs:
+#               script: terraform apply -auto-approve

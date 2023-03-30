@@ -1,0 +1,3 @@
+1. Architect how many clusters we want and naming convention 
+2. Architect how many namespaces we want and naming convention 
+3. Add Rotation on keys: https://registry.terraform.io/providers/hashicorp/azuread/latest/docs/resources/service_principal_password
