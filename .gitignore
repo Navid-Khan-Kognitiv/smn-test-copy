@@ -1,0 +1,7 @@
+.terraform/
+out.plan
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+kube/*
+output

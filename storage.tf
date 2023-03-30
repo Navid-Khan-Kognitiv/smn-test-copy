@@ -3,8 +3,8 @@ module "storage_account" {
   version         = "0.0.10"
   release_version = "1" # Kognitiv's Terraform Module version to use
 
-  resource_group_name = module.this.name
-  location            = module.this.location # Ex: North Europe
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location # Ex: North Europe
   location_short      = var.location_short   # Ex: neu
 
   client_name = "PUL"   # Ex: EEC
